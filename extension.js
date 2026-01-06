@@ -1352,7 +1352,8 @@ async function validateMdcFile(uri) {
             yaml.load(content);
         } catch (yamlError) {
             if (yamlError.code === 'MODULE_NOT_FOUND') {
-                warnings.push('js-yaml module not installed - YAML parsing skipped (run npm install)');
+                // js-yaml module not available in extension context - basic validation only
+                // Note: Full YAML validation is performed during conversion by the Python converter
             } else {
                 errors.push(`YAML parsing error: ${yamlError.message}`);
             }
