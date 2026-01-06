@@ -4,7 +4,7 @@ class CursorRulesConverter < Formula
   desc "Convert Cursor Rules (.mdc files) to VS Code Copilot Instructions"
   homepage "https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter"
   url "https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "" # Will be calculated after first release
+  sha256 "fed8347725ea533221421cbb8b83835ed83d02e5f3ec867b6aa623e4962d6113" # Will be calculated after first release
   license "MIT"
 
   depends_on "python@3.12"
