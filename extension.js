@@ -15,8 +15,453 @@ function activate(context) {
         vscode.commands.registerCommand('cursorvertext.convertFolder', convertFolder),
         vscode.commands.registerCommand('cursorvertext.convertFromGithub', convertFromGithub),
         vscode.commands.registerCommand('cursorvertext.convertWithPreset', convertWithPreset),
-        vscode.commands.registerCommand('cursorvertext.checkUpdate', checkUpdate)
+        vscode.commands.registerCommand('cursorvertext.checkUpdate', checkUpdate),
+        vscode.commands.registerCommand('cursorvertext.openConverterUI', () => openConverterUI(context))
     );
+}
+
+/**
+ * Open the Converter UI
+ */
+function openConverterUI(context) {
+    const panel = vscode.window.createWebviewPanel(
+        'cursorConverterUI',
+        'Cursor Rules Converter',
+        vscode.ViewColumn.One,
+        {
+            enableScripts: true,
+            retainContextWhenHidden: true
+        }
+    );
+
+    panel.webview.html = getWebviewContent();
+
+    // Handle messages from the webview
+    panel.webview.onDidReceiveMessage(
+        async message => {
+            switch (message.command) {
+                case 'selectFile':
+                    const fileUri = await vscode.window.showOpenDialog({
+                        canSelectFiles: true,
+                        canSelectFolders: false,
+                        canSelectMany: false,
+                        filters: { 'Cursor Rules': ['mdc'] },
+                        title: 'Select Cursor Rules File'
+                    });
+                    if (fileUri && fileUri[0]) {
+                        panel.webview.postMessage({ 
+                            command: 'fileSelected', 
+                            path: fileUri[0].fsPath 
+                        });
+                    }
+                    break;
+
+                case 'selectFolder':
+                    const folderUri = await vscode.window.showOpenDialog({
+                        canSelectFiles: false,
+                        canSelectFolders: true,
+                        canSelectMany: false,
+                        title: 'Select Cursor Rules Folder'
+                    });
+                    if (folderUri && folderUri[0]) {
+                        panel.webview.postMessage({ 
+                            command: 'folderSelected', 
+                            path: folderUri[0].fsPath 
+                        });
+                    }
+                    break;
+
+                case 'selectOutput':
+                    const outputUri = await vscode.window.showSaveDialog({
+                        filters: { 'Markdown': ['md'] },
+                        title: 'Save Copilot Instructions'
+                    });
+                    if (outputUri) {
+                        panel.webview.postMessage({ 
+                            command: 'outputSelected', 
+                            path: outputUri.fsPath 
+                        });
+                    }
+                    break;
+
+                case 'convertFile':
+                    if (!message.inputPath || !message.outputPath) {
+                        vscode.window.showErrorMessage('Please select both input file and output location');
+                        return;
+                    }
+                    const fileArgs = message.preset ? 
+                        ['--preset', message.preset, message.inputPath, message.outputPath] :
+                        [message.inputPath, message.outputPath];
+                    await runConverter(fileArgs);
+                    panel.webview.postMessage({ command: 'conversionComplete' });
+                    break;
+
+                case 'convertFolder':
+                    if (!message.inputPath || !message.outputPath) {
+                        vscode.window.showErrorMessage('Please select both input folder and output location');
+                        return;
+                    }
+                    const folderArgs = message.preset ?
+                        ['--preset', message.preset, '-i', message.inputPath, message.outputPath] :
+                        ['-i', message.inputPath, message.outputPath];
+                    await runConverter(folderArgs);
+                    panel.webview.postMessage({ command: 'conversionComplete' });
+                    break;
+
+                case 'convertGithub':
+                    if (!message.repoUrl || !message.outputPath) {
+                        vscode.window.showErrorMessage('Please enter GitHub URL and select output location');
+                        return;
+                    }
+                    const githubArgs = message.preset ?
+                        ['--preset', message.preset, message.repoUrl, message.outputPath] :
+                        [message.repoUrl, message.outputPath];
+                    await runConverter(githubArgs);
+                    panel.webview.postMessage({ command: 'conversionComplete' });
+                    break;
+            }
+        },
+        undefined,
+        context.subscriptions
+    );
+}
+
+/**
+ * Get the webview HTML content
+ */
+function getWebviewContent() {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cursor Rules Converter</title>
+    <style>
+        body {
+            font-family: var(--vscode-font-family);
+            padding: 20px;
+            color: var(--vscode-foreground);
+            background-color: var(--vscode-editor-background);
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: var(--vscode-editor-foreground);
+            border-bottom: 1px solid var(--vscode-panel-border);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .section {
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: var(--vscode-editor-foreground);
+            font-size: 18px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 3px;
+            font-family: var(--vscode-font-family);
+        }
+        input[type="text"]:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
+        select {
+            padding: 8px 12px;
+            background: var(--vscode-dropdown-background);
+            color: var(--vscode-dropdown-foreground);
+            border: 1px solid var(--vscode-dropdown-border);
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: var(--vscode-font-family);
+        }
+        button {
+            padding: 8px 16px;
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: var(--vscode-font-family);
+            font-size: 13px;
+        }
+        button:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+        button.secondary {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        button.secondary:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+        button.convert {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 10px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 3px;
+            display: none;
+        }
+        .status.success {
+            background: var(--vscode-testing-iconPassed);
+            color: var(--vscode-editor-background);
+        }
+        .status.error {
+            background: var(--vscode-testing-iconFailed);
+            color: var(--vscode-editor-background);
+        }
+        .info {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Cursor Rules Converter</h1>
+        
+        <!-- Convert File Section -->
+        <div class="section">
+            <h2>📄 Convert Single File</h2>
+            <div class="form-group">
+                <label>Input .mdc File:</label>
+                <div class="input-group">
+                    <input type="text" id="fileInput" placeholder="No file selected" readonly>
+                    <button class="secondary" onclick="selectFile()">Browse...</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Output Location:</label>
+                <div class="input-group">
+                    <input type="text" id="fileOutput" placeholder="No output location selected" readonly>
+                    <button class="secondary" onclick="selectOutput('file')">Browse...</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Preset:</label>
+                <select id="filePreset">
+                    <option value="">None</option>
+                    <option value="dev">Development (verbose + stats)</option>
+                    <option value="prod">Production (quiet)</option>
+                    <option value="preview">Preview (dry-run)</option>
+                </select>
+            </div>
+            <button class="convert" onclick="convertFile()">Convert File</button>
+            <div id="fileStatus" class="status"></div>
+        </div>
+
+        <!-- Convert Folder Section -->
+        <div class="section">
+            <h2>📁 Convert Folder</h2>
+            <div class="form-group">
+                <label>Input Folder:</label>
+                <div class="input-group">
+                    <input type="text" id="folderInput" placeholder="No folder selected" readonly>
+                    <button class="secondary" onclick="selectFolder()">Browse...</button>
+                </div>
+                <div class="info">Interactive mode will let you select which files to convert</div>
+            </div>
+            <div class="form-group">
+                <label>Output Location:</label>
+                <div class="input-group">
+                    <input type="text" id="folderOutput" placeholder="No output location selected" readonly>
+                    <button class="secondary" onclick="selectOutput('folder')">Browse...</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Preset:</label>
+                <select id="folderPreset">
+                    <option value="">None</option>
+                    <option value="dev">Development (verbose + stats)</option>
+                    <option value="prod">Production (quiet)</option>
+                    <option value="preview">Preview (dry-run)</option>
+                </select>
+            </div>
+            <button class="convert" onclick="convertFolder()">Convert Folder</button>
+            <div id="folderStatus" class="status"></div>
+        </div>
+
+        <!-- Convert from GitHub Section -->
+        <div class="section">
+            <h2>🌐 Convert from GitHub</h2>
+            <div class="form-group">
+                <label>GitHub Repository URL:</label>
+                <input type="text" id="githubUrl" placeholder="https://github.com/user/repo">
+                <div class="info">Enter a GitHub repository URL containing .mdc files</div>
+            </div>
+            <div class="form-group">
+                <label>Output Location:</label>
+                <div class="input-group">
+                    <input type="text" id="githubOutput" placeholder="No output location selected" readonly>
+                    <button class="secondary" onclick="selectOutput('github')">Browse...</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Preset:</label>
+                <select id="githubPreset">
+                    <option value="">None</option>
+                    <option value="dev">Development (verbose + stats)</option>
+                    <option value="prod">Production (quiet)</option>
+                    <option value="preview">Preview (dry-run)</option>
+                </select>
+            </div>
+            <button class="convert" onclick="convertGithub()">Convert from GitHub</button>
+            <div id="githubStatus" class="status"></div>
+        </div>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        function selectFile() {
+            vscode.postMessage({ command: 'selectFile' });
+        }
+
+        function selectFolder() {
+            vscode.postMessage({ command: 'selectFolder' });
+        }
+
+        function selectOutput(type) {
+            vscode.postMessage({ command: 'selectOutput', type: type });
+        }
+
+        function convertFile() {
+            const inputPath = document.getElementById('fileInput').value;
+            const outputPath = document.getElementById('fileOutput').value;
+            const preset = document.getElementById('filePreset').value;
+            
+            if (!inputPath || !outputPath) {
+                showStatus('fileStatus', 'Please select input file and output location', 'error');
+                return;
+            }
+
+            showStatus('fileStatus', 'Converting...', 'success');
+            vscode.postMessage({ 
+                command: 'convertFile', 
+                inputPath, 
+                outputPath, 
+                preset: preset || null 
+            });
+        }
+
+        function convertFolder() {
+            const inputPath = document.getElementById('folderInput').value;
+            const outputPath = document.getElementById('folderOutput').value;
+            const preset = document.getElementById('folderPreset').value;
+            
+            if (!inputPath || !outputPath) {
+                showStatus('folderStatus', 'Please select input folder and output location', 'error');
+                return;
+            }
+
+            showStatus('folderStatus', 'Converting...', 'success');
+            vscode.postMessage({ 
+                command: 'convertFolder', 
+                inputPath, 
+                outputPath, 
+                preset: preset || null 
+            });
+        }
+
+        function convertGithub() {
+            const repoUrl = document.getElementById('githubUrl').value;
+            const outputPath = document.getElementById('githubOutput').value;
+            const preset = document.getElementById('githubPreset').value;
+            
+            if (!repoUrl || !outputPath) {
+                showStatus('githubStatus', 'Please enter GitHub URL and select output location', 'error');
+                return;
+            }
+
+            showStatus('githubStatus', 'Converting...', 'success');
+            vscode.postMessage({ 
+                command: 'convertGithub', 
+                repoUrl, 
+                outputPath, 
+                preset: preset || null 
+            });
+        }
+
+        function showStatus(elementId, message, type) {
+            const statusEl = document.getElementById(elementId);
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+            statusEl.style.display = 'block';
+            
+            if (type === 'success' && message !== 'Converting...') {
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Handle messages from extension
+        window.addEventListener('message', event => {
+            const message = event.data;
+            
+            switch (message.command) {
+                case 'fileSelected':
+                    document.getElementById('fileInput').value = message.path;
+                    break;
+                case 'folderSelected':
+                    document.getElementById('folderInput').value = message.path;
+                    break;
+                case 'outputSelected':
+                    // Set the appropriate output field based on which one was active
+                    const activeSection = document.activeElement.closest('.section');
+                    if (activeSection) {
+                        const outputInput = activeSection.querySelector('input[id*="Output"]');
+                        if (outputInput) {
+                            outputInput.value = message.path;
+                        }
+                    }
+                    break;
+                case 'conversionComplete':
+                    // Find which conversion was active and show success
+                    const sections = ['file', 'folder', 'github'];
+                    sections.forEach(section => {
+                        const statusEl = document.getElementById(section + 'Status');
+                        if (statusEl.style.display === 'block' && statusEl.textContent === 'Converting...') {
+                            showStatus(section + 'Status', '✓ Conversion completed successfully!', 'success');
+                        }
+                    });
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>`;
 }
 
 /**

@@ -20,11 +20,13 @@
   },
   "files": [
     "bin/",
+    "extension.js",
     "convertmdc.py",
     "requirements.txt",
     ".convertmdcrc.dev",
     ".convertmdcrc.prod",
     ".convertmdcrc.preview",
+    "Logo_128x128.png",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
@@ -83,12 +85,18 @@
         "command": "cursorvertext.checkUpdate",
         "title": "Check for Updates",
         "category": "Cursor Rules"
+      },
+      {
+        "command": "cursorvertext.openConverterUI",
+        "title": "Open Converter UI",
+        "category": "Cursor Rules",
+        "icon": "$(layout-panel)"
       }
     ],
     "menus": {
       "explorer/context": [
         {
-          "when": "resourceExtname == .mdc",
+          "when": "resourceExtname == .mdc && !explorerResourceIsFolder",
           "command": "cursorvertext.convertFile",
           "group": "cursorvertext@1"
         },
@@ -96,6 +104,13 @@
           "when": "explorerResourceIsFolder",
           "command": "cursorvertext.convertFolder",
           "group": "cursorvertext@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "resourceExtname == .mdc",
+          "command": "cursorvertext.convertFile",
+          "group": "cursorvertext@1"
         }
       ],
       "commandPalette": [
