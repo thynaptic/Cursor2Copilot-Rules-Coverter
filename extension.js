@@ -1305,13 +1305,18 @@ async function validateMdcFile(uri) {
         return;
     }
 
-    const output = vscode.window.createOutputChannel('MDC Validation');
-    output.show();
-    output.clear();
-    output.appendLine(`Validating: ${filePath}\n`);
+    return vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: "Validating MDC file...",
+        cancellable: false
+    }, async () => {
+        const output = vscode.window.createOutputChannel('MDC Validation');
+        output.show();
+        output.clear();
+        output.appendLine(`Validating: ${filePath}\n`);
 
-    try {
-        const content = fs.readFileSync(filePath, 'utf8');
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
         const errors = [];
         const warnings = [];
 
@@ -1392,6 +1397,7 @@ async function validateMdcFile(uri) {
         output.appendLine(`\n❌ Failed to validate file: ${error.message}`);
         vscode.window.showErrorMessage('Validation failed. See output for details.');
     }
+    });
 }
 
 // ============================================================================
