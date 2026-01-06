@@ -24,8 +24,8 @@ class CursorRulesConverter < Formula
 
     # Install documentation
     doc.install "README.md"
-    doc.install "FEATURES.md"
-    doc.install "CHANGELOG.md"
+    doc.install "docs/FEATURES.md"
+    doc.install "docs/CHANGELOG.md"
   end
 
   test do
