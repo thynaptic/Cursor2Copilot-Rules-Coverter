@@ -1,0 +1,23 @@
+include README.md
+include LICENSE
+include VERSION
+include CHANGELOG.md
+include requirements.txt
+include .convertmdcrc.example
+include .convertmdcrc.dev
+include .convertmdcrc.prod
+include .convertmdcrc.preview
+
+recursive-exclude examples *
+recursive-exclude output *
+recursive-exclude tests *
+recursive-exclude .vscode *
+recursive-exclude node_modules *
+
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude .DS_Store
+global-exclude *.vsix
+global-exclude .gitignore

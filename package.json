@@ -8,12 +8,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/thynaptic/cursorvertext.git"
+    "url": "git+https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter.git"
   },
   "bugs": {
-    "url": "https://github.com/thynaptic/cursorvertext/issues"
+    "url": "https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter/issues"
   },
-  "homepage": "https://github.com/thynaptic/cursorvertext#readme",
+  "homepage": "https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter#readme",
   "engines": {
     "vscode": "^1.75.0"
   },

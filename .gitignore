@@ -11,3 +11,22 @@ __pycache__/
 
 # Output files (optional - uncomment if needed)
 # output/
+
+# Python packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# PyPI
+.pypirc
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+env/
+ENV/

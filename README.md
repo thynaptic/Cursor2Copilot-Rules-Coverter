@@ -107,6 +107,8 @@ python3 convertmdc.py --dry-run --stats examples/
 - Python 3.7+
 - PyYAML: `pip install pyyaml`
 
+For pip installation: `pip install cursor-rules-converter`
+
 The extension will prompt if Python is not configured.
 
 ## Output Format
@@ -157,4 +159,4 @@ MIT
 ---
 
 **Questions or Issues?**
-[GitHub Repository](https://github.com/thynaptic/cursorvertext)
+[GitHub Repository](https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter)

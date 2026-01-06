@@ -26,9 +26,9 @@ import yaml
 
 # Version information
 __version__ = "1.0.0"
-__update_url__ = "https://raw.githubusercontent.com/thynaptic/cursorvertext/main/convertmdc.py"
-__version_url__ = "https://raw.githubusercontent.com/thynaptic/cursorvertext/main/VERSION"
-__github_releases__ = "https://github.com/thynaptic/cursorvertext/releases/latest"
+__update_url__ = "https://raw.githubusercontent.com/thynaptic/Cursor2Copilot-Rules-Coverter/main/convertmdc.py"
+__version_url__ = "https://raw.githubusercontent.com/thynaptic/Cursor2Copilot-Rules-Coverter/main/VERSION"
+__github_releases__ = "https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter/releases/latest"
 
 
 class CursorRuleConverter:

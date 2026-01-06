@@ -206,7 +206,7 @@ Current version: 1.0.0
 New version available: 1.1.0
 
 To update, run: python3 convertmdc.py --update
-Or visit: https://github.com/thynaptic/cursorvertext/releases/latest
+# Or visit: https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter/releases/latest
 ```
 
 **Features:**
