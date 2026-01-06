@@ -1,0 +1,159 @@
+{
+  "name": "cursorvertext",
+  "displayName": "Cursor Rules to Copilot Instructions Converter",
+  "description": "Convert Cursor Rules (.mdc files) to VS Code Copilot Instructions with robust YAML parsing and batch processing",
+  "version": "1.0.0",
+  "publisher": "thynaptic",
+  "author": "Thynaptic",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thynaptic/cursorvertext.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thynaptic/cursorvertext/issues"
+  },
+  "homepage": "https://github.com/thynaptic/cursorvertext#readme",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other",
+    "Formatters"
+  ],
+  "keywords": [
+    "cursor",
+    "copilot",
+    "conversion",
+    "rules",
+    "instructions",
+    "mdc",
+    "ai",
+    "code-assistant"
+  ],
+  "icon": "Logo_128x128.png",
+  "activationEvents": [
+    "onCommand:cursorvertext.convertFile",
+    "onCommand:cursorvertext.convertFolder",
+    "onCommand:cursorvertext.convertFromGithub",
+    "onCommand:cursorvertext.convertWithPreset"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cursorvertext.convertFile",
+        "title": "Convert Cursor Rule File",
+        "category": "Cursor Rules"
+      },
+      {
+        "command": "cursorvertext.convertFolder",
+        "title": "Convert Cursor Rules Folder (Interactive)",
+        "category": "Cursor Rules"
+      },
+      {
+        "command": "cursorvertext.convertFromGithub",
+        "title": "Convert from GitHub Repository",
+        "category": "Cursor Rules"
+      },
+      {
+        "command": "cursorvertext.convertWithPreset",
+        "title": "Convert with Preset Configuration",
+        "category": "Cursor Rules"
+      },
+      {
+        "command": "cursorvertext.checkUpdate",
+        "title": "Check for Updates",
+        "category": "Cursor Rules"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .mdc",
+          "command": "cursorvertext.convertFile",
+          "group": "cursorvertext@1"
+        },
+        {
+          "when": "explorerResourceIsFolder",
+          "command": "cursorvertext.convertFolder",
+          "group": "cursorvertext@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "cursorvertext.convertFile",
+          "when": "editorLangId == yaml || resourceExtname == .mdc"
+        },
+        {
+          "command": "cursorvertext.convertFolder"
+        },
+        {
+          "command": "cursorvertext.convertFromGithub"
+        },
+        {
+          "command": "cursorvertext.convertWithPreset"
+        },
+        {
+          "command": "cursorvertext.checkUpdate"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Cursor Rules Converter",
+      "properties": {
+        "cursorvertext.verbose": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose logging for debugging"
+        },
+        "cursorvertext.showStats": {
+          "type": "boolean",
+          "default": true,
+          "description": "Display conversion statistics after processing"
+        },
+        "cursorvertext.autoBackup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create backups before overwriting existing files"
+        },
+        "cursorvertext.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Path to Python executable (python3, python, or full path)"
+        },
+        "cursorvertext.defaultPreset": {
+          "type": "string",
+          "enum": [
+            "none",
+            "dev",
+            "prod",
+            "preview"
+          ],
+          "default": "none",
+          "description": "Default preset configuration to use",
+          "enumDescriptions": [
+            "No preset (use extension settings)",
+            "Development mode (verbose + stats)",
+            "Production mode (quiet)",
+            "Preview mode (dry-run + stats)"
+          ]
+        }
+      }
+    }
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "^18.x",
+    "eslint": "^8.x"
+  },
+  "directories": {
+    "example": "examples"
+  },
+  "type": "commonjs"
+}

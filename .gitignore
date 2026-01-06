@@ -1,0 +1,13 @@
+# Backup directory
+.backups/
+
+# Configuration file (user-specific)
+.convertmdcrc
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Output files (optional - uncomment if needed)
+# output/
