@@ -1,0 +1,42 @@
+# VS Code Extension files
+*.vsix
+extension.js
+.vscode/
+.vscode-test/
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Development files
+.git/
+.gitignore
+.DS_Store
+*.log
+node_modules/
+
+# Documentation (keep README.md)
+BUILD.md
+PUBLISHING.md
+EXTENSION.md
+
+# Test files
+tests/
+test/
+*.test.js
+*.spec.js
+
+# Development dependencies
+requirements-dev.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Homebrew files (not needed for npm)
+Formula/
+homebrew-cursor2copilot-rules-coverter/

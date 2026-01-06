@@ -14,7 +14,25 @@
     "url": "https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter/issues"
   },
   "homepage": "https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter#readme",
+  "bin": {
+    "convertmdc": "./bin/convertmdc.js",
+    "cursor-convert": "./bin/convertmdc.js"
+  },
+  "files": [
+    "bin/",
+    "convertmdc.py",
+    "requirements.txt",
+    ".convertmdcrc.dev",
+    ".convertmdcrc.prod",
+    ".convertmdcrc.preview",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "FEATURES.md",
+    "INSTALL.md"
+  ],
   "engines": {
+    "node": ">=14.0.0",
     "vscode": "^1.75.0"
   },
   "categories": [
