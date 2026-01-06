@@ -824,11 +824,11 @@ async function previewConversion(uri) {
     // Show loading message
     previewPanel.webview.html = getLoadingHTML();
 
-    // Run converter in preview mode
+    // Run converter to generate preview output
     const tempOutput = path.join(require('os').tmpdir(), 'preview-' + Date.now() + '.md');
     
     try {
-        await runConverter(['--preset', 'preview', filePath, tempOutput], true);
+        await runConverter([filePath, tempOutput], true);
         
         // Read the generated file
         if (fs.existsSync(tempOutput)) {
@@ -1074,9 +1074,9 @@ async function showMdcFiles() {
 
     if (selected) {
         const action = await vscode.window.showQuickPick([
-            { label: '👁️  Preview', value: 'preview' },
-            { label: '🔄 Convert', value: 'convert' },
-            { label: '✅ Validate', value: 'validate' }
+            { label: 'Preview', value: 'preview' },
+            { label: 'Convert', value: 'convert' },
+            { label: 'Validate', value: 'validate' }
         ], {
             placeHolder: 'What would you like to do?'
         });

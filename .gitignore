@@ -32,3 +32,4 @@ env/
 ENV/
 *.tgz
 node_modules
+.cursor/
