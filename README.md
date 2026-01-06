@@ -1,6 +1,6 @@
 # Cursor Rules Converter
 
-![Logo](Logo_128x128.png)
+![Logo](Logo_512x512.png)
 
 Convert Cursor Rules (`.mdc` files) to VS Code Copilot Instructions. Available as both a VS Code extension and a powerful CLI tool.
 
