@@ -3,11 +3,34 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// Global state management
+let conversionHistory = [];
+let statusBarItem;
+let mdcFileWatcher;
+let previewPanel;
+
 /**
  * Activate the extension
  */
 function activate(context) {
     console.log('Cursor Rules Converter extension activated');
+
+    // Store context globally for history tracking
+    activate.context = context;
+
+    // Initialize status bar
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusBarItem.command = 'cursorvertext.showMdcFiles';
+    context.subscriptions.push(statusBarItem);
+
+    // Initialize history
+    loadConversionHistory(context);
+
+    // Auto-detect .mdc files and update status bar
+    updateMdcFileCount();
+    
+    // Watch for file changes
+    setupFileWatcher(context);
 
     // Register commands
     context.subscriptions.push(
@@ -16,7 +39,17 @@ function activate(context) {
         vscode.commands.registerCommand('cursorvertext.convertFromGithub', convertFromGithub),
         vscode.commands.registerCommand('cursorvertext.convertWithPreset', convertWithPreset),
         vscode.commands.registerCommand('cursorvertext.checkUpdate', checkUpdate),
-        vscode.commands.registerCommand('cursorvertext.openConverterUI', () => openConverterUI(context))
+        vscode.commands.registerCommand('cursorvertext.openConverterUI', () => openConverterUI(context)),
+        
+        // New Feature Commands
+        vscode.commands.registerCommand('cursorvertext.previewConversion', previewConversion),
+        vscode.commands.registerCommand('cursorvertext.showMdcFiles', showMdcFiles),
+        vscode.commands.registerCommand('cursorvertext.convertAll', convertAllMdcFiles),
+        vscode.commands.registerCommand('cursorvertext.validateMdc', validateMdcFile),
+        vscode.commands.registerCommand('cursorvertext.showHistory', showConversionHistory),
+        vscode.commands.registerCommand('cursorvertext.clearHistory', () => clearHistory(context)),
+        vscode.commands.registerCommand('cursorvertext.batchConvert', batchConvert),
+        vscode.commands.registerCommand('cursorvertext.toggleWatchMode', toggleWatchMode)
     );
 }
 
@@ -492,7 +525,18 @@ async function convertFile(uri) {
 
     if (!outputUri) return;
 
-    await runConverter([filePath, outputUri.fsPath]);
+    const success = await runConverter([filePath, outputUri.fsPath]);
+    
+    // Save to history
+    if (typeof activate.context !== 'undefined') {
+        saveToHistory(activate.context, {
+            source: filePath,
+            output: outputUri.fsPath,
+            preset: null,
+            timestamp: Date.now(),
+            success: success
+        });
+    }
 }
 
 /**
@@ -634,14 +678,14 @@ async function checkUpdate() {
 /**
  * Run the Python converter script
  */
-async function runConverter(args) {
+async function runConverter(args, silent = false) {
     const config = vscode.workspace.getConfiguration('cursorvertext');
     const scriptPath = path.join(__dirname, 'convertmdc.py');
     
     // Verify script exists
     if (!fs.existsSync(scriptPath)) {
         vscode.window.showErrorMessage('Converter script not found. Please reinstall the extension.');
-        return;
+        return false;
     }
 
     // Build command arguments
@@ -659,7 +703,9 @@ async function runConverter(args) {
 
     // Create output channel
     const output = vscode.window.createOutputChannel('Cursor Rules Converter');
-    output.show();
+    if (!silent) {
+        output.show();
+    }
     output.appendLine(`Running: ${pythonPath} ${fullArgs.join(' ')}\n`);
 
     return new Promise((resolve, reject) => {
@@ -687,7 +733,9 @@ async function runConverter(args) {
             output.appendLine(`\nFailed to start Python: ${error.message}`);
             output.appendLine('\nPlease ensure Python 3.7+ is installed and accessible.');
             output.appendLine('You can configure the Python path in settings: cursorvertext.pythonPath');
-            vscode.window.showErrorMessage('Failed to start Python. See output for details.');
+            if (!silent) {
+                vscode.window.showErrorMessage('Failed to start Python. See output for details.');
+            }
             reject(error);
         });
 
@@ -695,11 +743,15 @@ async function runConverter(args) {
             output.appendLine(`\nProcess exited with code ${code}`);
             
             if (code === 0) {
-                vscode.window.showInformationMessage('Conversion completed successfully!');
-                resolve();
+                if (!silent) {
+                    vscode.window.showInformationMessage('Conversion completed successfully!');
+                }
+                resolve(true);
             } else {
-                vscode.window.showErrorMessage(`Conversion failed. See output for details.`);
-                reject(new Error(`Process exited with code ${code}`));
+                if (!silent) {
+                    vscode.window.showErrorMessage(`Conversion failed. See output for details.`);
+                }
+                resolve(false);
             }
         });
     });
@@ -723,8 +775,742 @@ async function selectFolder() {
  * Deactivate the extension
  */
 function deactivate() {
+    if (mdcFileWatcher) {
+        mdcFileWatcher.dispose();
+    }
+    if (statusBarItem) {
+        statusBarItem.dispose();
+    }
+    if (previewPanel) {
+        previewPanel.dispose();
+    }
     console.log('Cursor Rules Converter extension deactivated');
 }
+
+// ============================================================================
+// FEATURE 1: PREVIEW PANE
+// ============================================================================
+
+/**
+ * Preview conversion without actually converting
+ */
+async function previewConversion(uri) {
+    const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
+    
+    if (!filePath || !filePath.endsWith('.mdc')) {
+        vscode.window.showErrorMessage('Please select a .mdc file');
+        return;
+    }
+
+    // Create or show preview panel
+    if (previewPanel) {
+        previewPanel.reveal(vscode.ViewColumn.Beside);
+    } else {
+        previewPanel = vscode.window.createWebviewPanel(
+            'mdcPreview',
+            'Preview: ' + path.basename(filePath),
+            vscode.ViewColumn.Beside,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true
+            }
+        );
+
+        previewPanel.onDidDispose(() => {
+            previewPanel = null;
+        });
+    }
+
+    // Show loading message
+    previewPanel.webview.html = getLoadingHTML();
+
+    // Run converter in preview mode
+    const tempOutput = path.join(require('os').tmpdir(), 'preview-' + Date.now() + '.md');
+    
+    try {
+        await runConverter(['--preset', 'preview', filePath, tempOutput], true);
+        
+        // Read the generated file
+        if (fs.existsSync(tempOutput)) {
+            const previewContent = fs.readFileSync(tempOutput, 'utf8');
+            previewPanel.webview.html = getPreviewHTML(filePath, previewContent);
+            
+            // Clean up temp file
+            fs.unlinkSync(tempOutput);
+        } else {
+            throw new Error('Preview file not generated');
+        }
+    } catch (error) {
+        previewPanel.webview.html = getErrorHTML(error.message);
+    }
+}
+
+/**
+ * Get loading HTML for preview
+ */
+function getLoadingHTML() {
+    return `<!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body { 
+                display: flex; 
+                justify-content: center; 
+                align-items: center; 
+                height: 100vh; 
+                font-family: var(--vscode-font-family);
+                color: var(--vscode-foreground);
+            }
+            .spinner {
+                border: 4px solid var(--vscode-panel-border);
+                border-top: 4px solid var(--vscode-button-background);
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    </head>
+    <body>
+        <div>
+            <div class="spinner"></div>
+            <p style="text-align: center; margin-top: 20px;">Generating preview...</p>
+        </div>
+    </body>
+    </html>`;
+}
+
+/**
+ * Get preview HTML content
+ */
+function getPreviewHTML(sourcePath, content) {
+    return `<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {
+                font-family: var(--vscode-font-family);
+                color: var(--vscode-foreground);
+                background-color: var(--vscode-editor-background);
+                padding: 20px;
+                line-height: 1.6;
+            }
+            .header {
+                border-bottom: 2px solid var(--vscode-panel-border);
+                padding-bottom: 10px;
+                margin-bottom: 20px;
+            }
+            .header h1 {
+                margin: 0 0 10px 0;
+                color: var(--vscode-editor-foreground);
+            }
+            .source-info {
+                color: var(--vscode-descriptionForeground);
+                font-size: 12px;
+            }
+            .content {
+                background: var(--vscode-editor-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                padding: 20px;
+                white-space: pre-wrap;
+                font-family: var(--vscode-editor-font-family);
+                font-size: var(--vscode-editor-font-size);
+            }
+            .actions {
+                margin-top: 20px;
+                padding-top: 20px;
+                border-top: 1px solid var(--vscode-panel-border);
+            }
+            button {
+                padding: 8px 16px;
+                background: var(--vscode-button-background);
+                color: var(--vscode-button-foreground);
+                border: none;
+                border-radius: 3px;
+                cursor: pointer;
+                margin-right: 10px;
+            }
+            button:hover {
+                background: var(--vscode-button-hoverBackground);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🔍 Preview: ${path.basename(sourcePath)}</h1>
+            <div class="source-info">Source: ${sourcePath}</div>
+        </div>
+        <div class="content">${escapeHtml(content)}</div>
+        <div class="actions">
+            <button onclick="copyToClipboard()">📋 Copy to Clipboard</button>
+            <button onclick="closePreview()">✖ Close</button>
+        </div>
+        <script>
+            const vscode = acquireVsCodeApi();
+            
+            function copyToClipboard() {
+                const content = document.querySelector('.content').textContent;
+                navigator.clipboard.writeText(content).then(() => {
+                    alert('Content copied to clipboard!');
+                });
+            }
+            
+            function closePreview() {
+                vscode.postMessage({ command: 'close' });
+            }
+        </script>
+    </body>
+    </html>`;
+}
+
+/**
+ * Get error HTML for preview
+ */
+function getErrorHTML(errorMessage) {
+    return `<!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {
+                font-family: var(--vscode-font-family);
+                color: var(--vscode-foreground);
+                padding: 20px;
+            }
+            .error {
+                background: var(--vscode-inputValidation-errorBackground);
+                border: 1px solid var(--vscode-inputValidation-errorBorder);
+                padding: 20px;
+                border-radius: 4px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="error">
+            <h2>❌ Preview Error</h2>
+            <p>${escapeHtml(errorMessage)}</p>
+        </div>
+    </body>
+    </html>`;
+}
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// ============================================================================
+// FEATURE 2: AUTO-DETECT & STATUS BAR
+// ============================================================================
+
+/**
+ * Update status bar with .mdc file count
+ */
+async function updateMdcFileCount() {
+    if (!vscode.workspace.workspaceFolders) {
+        statusBarItem.hide();
+        return;
+    }
+
+    try {
+        const mdcFiles = await vscode.workspace.findFiles('**/*.mdc', '**/node_modules/**');
+        const count = mdcFiles.length;
+
+        if (count > 0) {
+            statusBarItem.text = `$(file-code) ${count} .mdc file${count !== 1 ? 's' : ''}`;
+            statusBarItem.tooltip = `Click to view .mdc files`;
+            statusBarItem.show();
+        } else {
+            statusBarItem.hide();
+        }
+    } catch (error) {
+        console.error('Error updating .mdc file count:', error);
+        statusBarItem.hide();
+    }
+}
+
+/**
+ * Setup file watcher for .mdc files
+ */
+function setupFileWatcher(context) {
+    // Watch for .mdc file changes
+    const watcher = vscode.workspace.createFileSystemWatcher('**/*.mdc');
+    
+    watcher.onDidCreate(() => updateMdcFileCount());
+    watcher.onDidDelete(() => updateMdcFileCount());
+    
+    context.subscriptions.push(watcher);
+}
+
+/**
+ * Show list of .mdc files in workspace
+ */
+async function showMdcFiles() {
+    const mdcFiles = await vscode.workspace.findFiles('**/*.mdc', '**/node_modules/**');
+    
+    if (mdcFiles.length === 0) {
+        vscode.window.showInformationMessage('No .mdc files found in workspace');
+        return;
+    }
+
+    const items = mdcFiles.map(file => ({
+        label: path.basename(file.fsPath),
+        description: vscode.workspace.asRelativePath(file.fsPath),
+        uri: file
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select a .mdc file to convert or preview'
+    });
+
+    if (selected) {
+        const action = await vscode.window.showQuickPick([
+            { label: '👁️  Preview', value: 'preview' },
+            { label: '🔄 Convert', value: 'convert' },
+            { label: '✅ Validate', value: 'validate' }
+        ], {
+            placeHolder: 'What would you like to do?'
+        });
+
+        if (action) {
+            switch (action.value) {
+                case 'preview':
+                    await previewConversion(selected.uri);
+                    break;
+                case 'convert':
+                    await convertFile(selected.uri);
+                    break;
+                case 'validate':
+                    await validateMdcFile(selected.uri);
+                    break;
+            }
+        }
+    }
+}
+
+/**
+ * Convert all .mdc files in workspace
+ */
+async function convertAllMdcFiles() {
+    const mdcFiles = await vscode.workspace.findFiles('**/*.mdc', '**/node_modules/**');
+    
+    if (mdcFiles.length === 0) {
+        vscode.window.showInformationMessage('No .mdc files found in workspace');
+        return;
+    }
+
+    const confirm = await vscode.window.showWarningMessage(
+        `Convert all ${mdcFiles.length} .mdc file(s)?`,
+        { modal: true },
+        'Yes', 'No'
+    );
+
+    if (confirm !== 'Yes') return;
+
+    const workspaceFolder = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const outputPath = path.join(workspaceFolder, 'copilot-instructions-all.md');
+
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: "Converting all .mdc files",
+        cancellable: false
+    }, async (progress) => {
+        for (let i = 0; i < mdcFiles.length; i++) {
+            progress.report({ 
+                increment: (100 / mdcFiles.length),
+                message: `Converting ${i + 1}/${mdcFiles.length}` 
+            });
+
+            const file = mdcFiles[i];
+            const outputName = path.basename(file.fsPath, '.mdc') + '-copilot.md';
+            const output = path.join(path.dirname(file.fsPath), outputName);
+            
+            try {
+                await runConverter([file.fsPath, output], true);
+            } catch (error) {
+                console.error(`Failed to convert ${file.fsPath}:`, error);
+            }
+        }
+    });
+
+    vscode.window.showInformationMessage(`Successfully converted ${mdcFiles.length} file(s)!`);
+}
+
+/**
+ * Toggle watch mode for auto-conversion
+ */
+let watchMode = false;
+let watchModeWatcher;
+
+async function toggleWatchMode() {
+    watchMode = !watchMode;
+
+    if (watchMode) {
+        // Enable watch mode
+        watchModeWatcher = vscode.workspace.createFileSystemWatcher('**/*.mdc');
+        
+        watchModeWatcher.onDidChange(async (uri) => {
+            const config = vscode.workspace.getConfiguration('cursorvertext');
+            if (config.get('watchModeEnabled')) {
+                vscode.window.showInformationMessage(`Auto-converting ${path.basename(uri.fsPath)}...`);
+                const outputPath = uri.fsPath.replace('.mdc', '-copilot.md');
+                try {
+                    await runConverter([uri.fsPath, outputPath], true);
+                } catch (error) {
+                    console.error('Watch mode conversion failed:', error);
+                }
+            }
+        });
+
+        vscode.window.showInformationMessage('🔍 Watch mode enabled - .mdc files will auto-convert on save');
+    } else {
+        // Disable watch mode
+        if (watchModeWatcher) {
+            watchModeWatcher.dispose();
+            watchModeWatcher = null;
+        }
+        vscode.window.showInformationMessage('Watch mode disabled');
+    }
+}
+
+// ============================================================================
+// FEATURE 3: BATCH OPERATIONS
+// ============================================================================
+
+/**
+ * Batch convert with options
+ */
+async function batchConvert() {
+    const mdcFiles = await vscode.workspace.findFiles('**/*.mdc', '**/node_modules/**');
+    
+    if (mdcFiles.length === 0) {
+        vscode.window.showInformationMessage('No .mdc files found in workspace');
+        return;
+    }
+
+    // Let user select which files to convert
+    const items = mdcFiles.map(file => ({
+        label: path.basename(file.fsPath),
+        description: vscode.workspace.asRelativePath(file.fsPath),
+        picked: false,
+        uri: file
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select files to batch convert (use Space to select multiple)',
+        canPickMany: true
+    });
+
+    if (!selected || selected.length === 0) return;
+
+    // Ask for preset
+    const preset = await vscode.window.showQuickPick([
+        { label: 'None', value: '' },
+        { label: 'dev - Development (verbose + stats)', value: 'dev' },
+        { label: 'prod - Production (quiet)', value: 'prod' },
+        { label: 'preview - Preview (dry-run)', value: 'preview' }
+    ], {
+        placeHolder: 'Select preset for batch conversion'
+    });
+
+    if (!preset) return;
+
+    // Ask for output strategy
+    const outputStrategy = await vscode.window.showQuickPick([
+        { label: 'Same directory', description: 'Convert in place', value: 'same' },
+        { label: 'Custom directory', description: 'Choose output folder', value: 'custom' },
+        { label: 'Combined file', description: 'Merge into single file', value: 'combined' }
+    ], {
+        placeHolder: 'Select output strategy'
+    });
+
+    if (!outputStrategy) return;
+
+    let outputDir = null;
+    if (outputStrategy.value === 'custom' || outputStrategy.value === 'combined') {
+        const folderUri = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            title: 'Select Output Folder'
+        });
+        
+        if (!folderUri) return;
+        outputDir = folderUri[0].fsPath;
+    }
+
+    // Perform batch conversion
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: "Batch Converting",
+        cancellable: false
+    }, async (progress) => {
+        const total = selected.length;
+        let success = 0;
+        let failed = 0;
+
+        for (let i = 0; i < total; i++) {
+            const file = selected[i].uri;
+            progress.report({ 
+                increment: (100 / total),
+                message: `Converting ${i + 1}/${total}: ${path.basename(file.fsPath)}` 
+            });
+
+            let outputPath;
+            if (outputStrategy.value === 'same') {
+                outputPath = file.fsPath.replace('.mdc', '-copilot.md');
+            } else if (outputStrategy.value === 'custom') {
+                outputPath = path.join(outputDir, path.basename(file.fsPath).replace('.mdc', '-copilot.md'));
+            } else {
+                outputPath = path.join(outputDir, `combined-${i}.md`);
+            }
+
+            try {
+                const args = preset.value ? ['--preset', preset.value, file.fsPath, outputPath] : [file.fsPath, outputPath];
+                await runConverter(args, true);
+                success++;
+            } catch (error) {
+                console.error(`Failed to convert ${file.fsPath}:`, error);
+                failed++;
+            }
+        }
+
+        vscode.window.showInformationMessage(
+            `Batch conversion complete! ✅ ${success} succeeded, ❌ ${failed} failed`
+        );
+    });
+}
+
+// ============================================================================
+// FEATURE 4: VALIDATION
+// ============================================================================
+
+/**
+ * Validate .mdc file structure and syntax
+ */
+async function validateMdcFile(uri) {
+    const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
+    
+    if (!filePath || !filePath.endsWith('.mdc')) {
+        vscode.window.showErrorMessage('Please select a .mdc file');
+        return;
+    }
+
+    const output = vscode.window.createOutputChannel('MDC Validation');
+    output.show();
+    output.clear();
+    output.appendLine(`Validating: ${filePath}\n`);
+
+    try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const errors = [];
+        const warnings = [];
+
+        // Basic validation checks
+        
+        // 1. Check if file is empty
+        if (content.trim().length === 0) {
+            errors.push('File is empty');
+        }
+
+        // 2. Check for YAML front matter
+        if (!content.startsWith('---')) {
+            warnings.push('No YAML front matter detected (optional but recommended)');
+        }
+
+        // 3. Check for common YAML errors
+        const lines = content.split('\n');
+        lines.forEach((line, idx) => {
+            // Check for tabs (should use spaces in YAML)
+            if (line.includes('\t')) {
+                warnings.push(`Line ${idx + 1}: Contains tabs (use spaces in YAML)`);
+            }
+            
+            // Check for common typos
+            if (line.match(/^\s*-\s*alwasy\b/i)) {
+                errors.push(`Line ${idx + 1}: Typo "alwasy" should be "always"`);
+            }
+        });
+
+        // 4. Check for required sections (customize based on your needs)
+        if (!content.includes('rules:') && !content.includes('instructions:')) {
+            warnings.push('No "rules:" or "instructions:" section found');
+        }
+
+        // 5. Try to parse as YAML
+        try {
+            const yaml = require('js-yaml');
+            yaml.load(content);
+        } catch (yamlError) {
+            if (yamlError.code === 'MODULE_NOT_FOUND') {
+                warnings.push('js-yaml module not installed - YAML parsing skipped (run npm install)');
+            } else {
+                errors.push(`YAML parsing error: ${yamlError.message}`);
+            }
+        }
+
+        // Display results
+        output.appendLine('='.repeat(50));
+        
+        if (errors.length === 0 && warnings.length === 0) {
+            output.appendLine('✅ No issues found!');
+            output.appendLine('\nFile appears to be valid.');
+            vscode.window.showInformationMessage('✅ Validation passed!');
+        } else {
+            if (errors.length > 0) {
+                output.appendLine(`\n❌ ERRORS (${errors.length}):`);
+                errors.forEach((err, i) => {
+                    output.appendLine(`  ${i + 1}. ${err}`);
+                });
+            }
+
+            if (warnings.length > 0) {
+                output.appendLine(`\n⚠️  WARNINGS (${warnings.length}):`);
+                warnings.forEach((warn, i) => {
+                    output.appendLine(`  ${i + 1}. ${warn}`);
+                });
+            }
+
+            if (errors.length > 0) {
+                vscode.window.showErrorMessage(`❌ Validation failed with ${errors.length} error(s)`);
+            } else {
+                vscode.window.showWarningMessage(`⚠️ Validation completed with ${warnings.length} warning(s)`);
+            }
+        }
+
+    } catch (error) {
+        output.appendLine(`\n❌ Failed to validate file: ${error.message}`);
+        vscode.window.showErrorMessage('Validation failed. See output for details.');
+    }
+}
+
+// ============================================================================
+// FEATURE 5: HISTORY PANEL
+// ============================================================================
+
+/**
+ * Load conversion history from workspace storage
+ */
+function loadConversionHistory(context) {
+    const stored = context.workspaceState.get('conversionHistory', []);
+    conversionHistory = stored;
+}
+
+/**
+ * Save conversion to history
+ */
+function saveToHistory(context, entry) {
+    conversionHistory.unshift(entry);
+    
+    // Keep only last 50 entries
+    if (conversionHistory.length > 50) {
+        conversionHistory = conversionHistory.slice(0, 50);
+    }
+    
+    context.workspaceState.update('conversionHistory', conversionHistory);
+}
+
+/**
+ * Show conversion history panel
+ */
+async function showConversionHistory() {
+    if (conversionHistory.length === 0) {
+        vscode.window.showInformationMessage('No conversion history available');
+        return;
+    }
+
+    const items = conversionHistory.map((entry, idx) => ({
+        label: `${entry.source ? path.basename(entry.source) : 'Unknown'} → ${entry.output ? path.basename(entry.output) : 'Unknown'}`,
+        description: entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'Unknown date',
+        detail: `Preset: ${entry.preset || 'None'} | Status: ${entry.success ? '✅' : '❌'}`,
+        index: idx,
+        entry: entry
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select a conversion from history'
+    });
+
+    if (selected) {
+        const action = await vscode.window.showQuickPick([
+            { label: '📂 Open Source', value: 'source' },
+            { label: '📄 Open Output', value: 'output' },
+            { label: '🔄 Re-convert', value: 'reconvert' },
+            { label: '📋 Copy Details', value: 'copy' }
+        ], {
+            placeHolder: 'What would you like to do?'
+        });
+
+        if (action) {
+            const entry = selected.entry;
+            
+            switch (action.value) {
+                case 'source':
+                    if (entry.source && fs.existsSync(entry.source)) {
+                        const doc = await vscode.workspace.openTextDocument(entry.source);
+                        await vscode.window.showTextDocument(doc);
+                    } else {
+                        vscode.window.showErrorMessage('Source file not found');
+                    }
+                    break;
+                    
+                case 'output':
+                    if (entry.output && fs.existsSync(entry.output)) {
+                        const doc = await vscode.workspace.openTextDocument(entry.output);
+                        await vscode.window.showTextDocument(doc);
+                    } else {
+                        vscode.window.showErrorMessage('Output file not found');
+                    }
+                    break;
+                    
+                case 'reconvert':
+                    if (entry.source && fs.existsSync(entry.source)) {
+                        const uri = vscode.Uri.file(entry.source);
+                        await convertFile(uri);
+                    } else {
+                        vscode.window.showErrorMessage('Source file not found');
+                    }
+                    break;
+                    
+                case 'copy':
+                    const details = JSON.stringify(entry, null, 2);
+                    await vscode.env.clipboard.writeText(details);
+                    vscode.window.showInformationMessage('Details copied to clipboard');
+                    break;
+            }
+        }
+    }
+}
+
+/**
+ * Clear conversion history
+ */
+async function clearHistory(context) {
+    const confirm = await vscode.window.showWarningMessage(
+        'Clear all conversion history?',
+        { modal: true },
+        'Yes', 'No'
+    );
+
+    if (confirm === 'Yes') {
+        conversionHistory = [];
+        context.workspaceState.update('conversionHistory', []);
+        vscode.window.showInformationMessage('History cleared');
+    }
+}
+
+// ============================================================================
+// ORIGINAL FUNCTIONS (with history tracking added)
+// ============================================================================
 
 module.exports = {
     activate,

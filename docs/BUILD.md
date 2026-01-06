@@ -1,102 +1,60 @@
-# Building and Testing the Package
+# Build Guide
 
 ## Quick Start
 
 ```bash
-# Install build tools
 pip install build twine
-
-# Build the package
 python3 -m build
-
-# Test locally
 pip install -e .
 ```
 
-## Build Package
+## Build
 
 ```bash
-# Clean previous builds
 rm -rf dist/ build/ *.egg-info
-
-# Build both source and wheel distributions
 python3 -m build
-
-# Output:
-# dist/cursor-rules-converter-1.0.0.tar.gz
-# dist/cursor-rules-converter-1.0.0-py3-none-any.whl
 ```
 
-## Test Installation Locally
+Outputs:
+- dist/cursor-rules-converter-1.0.0.tar.gz
+- dist/cursor-rules-converter-1.0.0-py3-none-any.whl
+
+## Test Locally
 
 ```bash
-# Install in editable/development mode
 pip install -e .
-
-# Test the commands
 convertmdc --version
-cursor-convert --help
-
-# Test conversion
 convertmdc --dry-run examples/ test-output.md
 ```
 
 ## Test Built Package
 
 ```bash
-# Create virtual environment for testing
 python3 -m venv test-env
 source test-env/bin/activate
-
-# Install from built wheel
 pip install dist/cursor-rules-converter-*.whl
-
-# Test
 convertmdc --version
-convertmdc --help
-
-# Cleanup
 deactivate
 rm -rf test-env
 ```
 
-## Check Package Contents
+## Validation
 
 ```bash
-# List files in wheel
-python3 -m zipfile -l dist/cursor-rules-converter-*.whl
-
-# List files in source distribution
-tar -tzf dist/cursor-rules-converter-*.tar.gz
-```
-
-## Validate Package
-
-```bash
-# Check package metadata
 python3 -m twine check dist/*
-
-# Should show: PASSED
 ```
 
-## Test Upload to TestPyPI
+## Test Upload
 
 ```bash
-# Upload to TestPyPI (test first!)
 python3 -m twine upload --repository testpypi dist/*
-
-# Install from TestPyPI
 pip install --index-url https://test.pypi.org/simple/ cursorvertext
-
-# Test installation
 convertmdc --version
 ```
 
-## Common Issues
+## Troubleshooting
 
-### ModuleNotFoundError
-
-Ensure all dependencies are in setup.py and pyproject.toml
+Ensure all dependencies are listed in setup.py and pyproject.toml.
 
 ### Command Not Found After Install
 

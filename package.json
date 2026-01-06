@@ -2,7 +2,7 @@
   "name": "cursorvertext",
   "displayName": "Cursor Rules to Copilot Instructions Converter",
   "description": "Convert Cursor Rules (.mdc files) to VS Code Copilot Instructions with robust YAML parsing and batch processing",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "thynaptic",
   "author": "Thynaptic",
   "license": "MIT",
@@ -53,10 +53,7 @@
   ],
   "icon": "Logo_128x128.png",
   "activationEvents": [
-    "onCommand:cursorvertext.convertFile",
-    "onCommand:cursorvertext.convertFolder",
-    "onCommand:cursorvertext.convertFromGithub",
-    "onCommand:cursorvertext.convertWithPreset"
+    "onStartupFinished"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -91,6 +88,53 @@
         "title": "Open Converter UI",
         "category": "Cursor Rules",
         "icon": "$(layout-panel)"
+      },
+      {
+        "command": "cursorvertext.previewConversion",
+        "title": "Preview Conversion",
+        "category": "Cursor Rules",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "cursorvertext.showMdcFiles",
+        "title": "Show .mdc Files",
+        "category": "Cursor Rules",
+        "icon": "$(files)"
+      },
+      {
+        "command": "cursorvertext.convertAll",
+        "title": "Convert All .mdc Files",
+        "category": "Cursor Rules",
+        "icon": "$(fold-down)"
+      },
+      {
+        "command": "cursorvertext.validateMdc",
+        "title": "Validate .mdc File",
+        "category": "Cursor Rules",
+        "icon": "$(check)"
+      },
+      {
+        "command": "cursorvertext.showHistory",
+        "title": "Show Conversion History",
+        "category": "Cursor Rules",
+        "icon": "$(history)"
+      },
+      {
+        "command": "cursorvertext.clearHistory",
+        "title": "Clear Conversion History",
+        "category": "Cursor Rules"
+      },
+      {
+        "command": "cursorvertext.batchConvert",
+        "title": "Batch Convert Files",
+        "category": "Cursor Rules",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "cursorvertext.toggleWatchMode",
+        "title": "Toggle Watch Mode",
+        "category": "Cursor Rules",
+        "icon": "$(eye-watch)"
       }
     ],
     "menus": {
@@ -101,9 +145,19 @@
           "group": "cursorvertext@1"
         },
         {
+          "when": "resourceExtname == .mdc && !explorerResourceIsFolder",
+          "command": "cursorvertext.previewConversion",
+          "group": "cursorvertext@2"
+        },
+        {
+          "when": "resourceExtname == .mdc && !explorerResourceIsFolder",
+          "command": "cursorvertext.validateMdc",
+          "group": "cursorvertext@3"
+        },
+        {
           "when": "explorerResourceIsFolder",
           "command": "cursorvertext.convertFolder",
-          "group": "cursorvertext@2"
+          "group": "cursorvertext@4"
         }
       ],
       "editor/context": [
@@ -111,6 +165,16 @@
           "when": "resourceExtname == .mdc",
           "command": "cursorvertext.convertFile",
           "group": "cursorvertext@1"
+        },
+        {
+          "when": "resourceExtname == .mdc",
+          "command": "cursorvertext.previewConversion",
+          "group": "cursorvertext@2"
+        },
+        {
+          "when": "resourceExtname == .mdc",
+          "command": "cursorvertext.validateMdc",
+          "group": "cursorvertext@3"
         }
       ],
       "commandPalette": [
@@ -171,6 +235,23 @@
             "Production mode (quiet)",
             "Preview mode (dry-run + stats)"
           ]
+        },
+        "cursorvertext.watchModeEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically convert .mdc files when they are saved"
+        },
+        "cursorvertext.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show .mdc file count in status bar"
+        },
+        "cursorvertext.maxHistoryEntries": {
+          "type": "number",
+          "default": 50,
+          "minimum": 10,
+          "maximum": 200,
+          "description": "Maximum number of conversion history entries to keep"
         }
       }
     }
@@ -184,6 +265,9 @@
     "@types/vscode": "^1.75.0",
     "@types/node": "^18.x",
     "eslint": "^8.x"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
   },
   "directories": {
     "example": "examples"

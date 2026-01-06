@@ -1,102 +1,70 @@
-# Installation Guide
+# Installation
 
-## Install from PyPI
+## PyPI
 
 ```bash
 pip install cursor-rules-converter
 ```
 
-## Install from Source
+## Source
 
 ```bash
-# Clone the repository
 git clone https://github.com/thynaptic/Cursor2Copilot-Rules-Coverter.git
 cd Cursor2Copilot-Rules-Coverter
-
-# Install in development mode
-pip install -e .
-
-# Or install normally
-pip install .
+pip install -e .  # Development mode
+# or
+pip install .     # Normal install
 ```
 
-## Install Development Dependencies
+## Development
 
 ```bash
 pip install -e ".[dev]"
 ```
 
-## Verify Installation
+## Verification
 
 ```bash
-# Check version
 convertmdc --version
-
-# Or use alternative command
 cursor-convert --version
-
-# Run help
 convertmdc --help
 ```
 
-## Usage After Installation
-
-Once installed via pip, you can use the command from anywhere:
+## Usage
 
 ```bash
-# Convert a file
 convertmdc input.mdc output.md
-
-# Interactive mode
 convertmdc -i examples/
-
-# With preset
 convertmdc --preset dev examples/ output.md
-
-# From GitHub
 convertmdc https://github.com/user/repo output.md
 ```
 
-## Uninstall
+## Management
 
 ```bash
 pip uninstall cursor-rules-converter
-```
-
-## Upgrade
-
-```bash
 pip install --upgrade cursor-rules-converter
 ```
 
-## Virtual Environment (Recommended)
+## Virtual Environment
 
 ```bash
-# Create virtual environment
 python3 -m venv venv
-
-# Activate
 source venv/bin/activate  # Mac/Linux
 venv\Scripts\activate     # Windows
-
-# Install
 pip install cursor-rules-converter
-
-# Deactivate when done
 deactivate
 ```
 
-## System Requirements
+## Requirements
 
-- Python 3.7 or later
-- pip (usually comes with Python)
-- Internet connection (for PyPI installation)
+- Python 3.7+
+- pip
+- Internet connection
 
 ## Troubleshooting
 
-### Command Not Found
-
-If `convertmdc` is not recognized after installation:
+If `convertmdc` command not found:
 
 ```bash
 # Check if pip's bin directory is in PATH
